@@ -3,13 +3,13 @@
 }
 
 .app-shell {
-  width: min(100% - 2rem, 56rem);
+  width: min(100% - 2rem, 68rem);
   margin: 0 auto;
-  padding: 3rem 0;
+  padding: 1.5rem 0 4rem;
 }
 
 .app-header {
-  padding: 2rem 0;
+  padding: 1.25rem 0 1.5rem;
 }
 
 .eyebrow {
@@ -30,31 +30,248 @@
   color: #a4afc4;
 }
 
-.fleet-preview {
+.section-heading {
+  margin: 1.5rem 0;
+}
+
+.section-heading h2 {
+  margin: 0;
+  font-size: clamp(1.8rem, 4vw, 2.4rem);
+}
+
+.section-heading > p:last-child {
+  color: #a4afc4;
+  margin-bottom: 0;
+}
+
+.booking-card {
   border: 1px solid #2c3850;
   border-radius: 1rem;
   background: #172033;
-  padding: 1.5rem;
+  padding: clamp(1rem, 3vw, 1.75rem);
 }
 
-.fleet-preview h2 {
-  margin-top: 0;
-}
-
-.fleet-preview ul {
+.booking-controls {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
-  gap: 0.75rem;
+  grid-template-columns: 1.3fr 1fr 0.8fr;
+  gap: 1rem;
+}
+
+.field {
+  display: grid;
+  gap: 0.45rem;
+  color: #dce5f5;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.field small {
+  color: #8d9bb2;
+  font-weight: 400;
+}
+
+.field input,
+.field select {
+  min-width: 0;
+  width: 100%;
+  min-height: 2.8rem;
+  border: 1px solid #3a4964;
+  border-radius: 0.55rem;
+  padding: 0.65rem 0.75rem;
+  background: #101725;
+  color: #f2f5fb;
+  font: inherit;
+}
+
+.field input:focus,
+.field select:focus,
+button:focus-visible {
+  outline: 2px solid #8da6ff;
+  outline-offset: 2px;
+}
+
+.availability-section {
+  margin-top: 1.75rem;
+  border-top: 1px solid #2c3850;
+  padding-top: 1.35rem;
+}
+
+.subsection-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.subsection-heading h3 {
+  margin: 0.3rem 0 1rem;
+}
+
+.timezone-badge {
+  border: 1px solid #3a4964;
+  border-radius: 2rem;
+  padding: 0.3rem 0.65rem;
+  color: #b7c8ff;
+  font-size: 0.76rem;
+  white-space: nowrap;
+}
+
+.blocked-list {
+  margin-bottom: 1rem;
+  border-radius: 0.6rem;
+  background: #2a2029;
+  padding: 0.75rem 1rem;
+}
+
+.field-caption {
+  color: #a4afc4;
+  font-size: 0.82rem;
+}
+
+.blocked-list ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.5rem 0 0;
   padding: 0;
   list-style: none;
 }
 
-.fleet-preview li {
-  border-radius: 0.6rem;
+.blocked-list li {
+  border-radius: 2rem;
+  background: #492b36;
+  padding: 0.35rem 0.7rem;
+  color: #ffb6ba;
+  font-size: 0.82rem;
+}
+
+.slot-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(6.6rem, 1fr));
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+}
+
+.slot-button,
+.primary-button {
+  min-height: 2.55rem;
+  border: 1px solid #3a4964;
+  border-radius: 0.55rem;
   background: #222d43;
-  padding: 0.8rem 1rem;
+  color: #e8edfa;
+  font: inherit;
+  cursor: pointer;
+}
+
+.slot-button:hover:not(:disabled) {
+  border-color: #9cb0ff;
+}
+
+.slot-button.selected,
+.primary-button {
+  border-color: #8da6ff;
+  background: #405bd0;
+  color: white;
+}
+
+.slot-button:disabled {
+  border-color: #313949;
+  background: #202531;
+  color: #788194;
+  cursor: not-allowed;
+  text-decoration: line-through;
+}
+
+.slot-legend {
+  display: flex;
+  gap: 1.2rem;
+  margin-top: 0.8rem;
+  color: #a4afc4;
+  font-size: 0.78rem;
+}
+
+.slot-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.legend-dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+}
+
+.legend-dot.available {
+  background: #66d5a2;
+}
+
+.legend-dot.unavailable {
+  background: #ff7d88;
+}
+
+.booking-form {
+  display: flex;
+  align-items: end;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-top: 1.5rem;
+  border-top: 1px solid #2c3850;
+  padding-top: 1.25rem;
+}
+
+.pilot-field {
+  flex: 1 1 16rem;
+}
+
+.booking-summary {
+  flex: 1 1 100%;
+  margin: 0;
+  color: #b7c8ff;
+}
+
+.primary-button {
+  min-width: 10rem;
+  padding: 0.6rem 1rem;
+  font-weight: 700;
+}
+
+.primary-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.notice {
+  margin: 1rem 0 0;
+  border-radius: 0.55rem;
+  padding: 0.75rem 1rem;
 }
 
 .error-message {
   color: #ff9a9a;
+  background: #39232b;
+}
+
+.success-message {
+  color: #9cf0c4;
+  background: #1d3831;
+}
+
+@media (max-width: 700px) {
+  .booking-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .subsection-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .timezone-badge {
+    margin-bottom: 0.5rem;
+  }
+
+  .primary-button {
+    width: 100%;
+  }
 }
