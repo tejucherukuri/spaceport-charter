@@ -1,17 +1,20 @@
 import io
 import json
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
+from threading import Barrier
 from zoneinfo import ZoneInfo
 
+from django.db import close_old_connections
 from django.db import IntegrityError, transaction
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.db.models.deletion import ProtectedError
-from django.test import TestCase
+from django.test import TestCase, TransactionTestCase
 from django.utils import timezone as django_timezone
-from rest_framework.test import APITestCase
+from rest_framework.test import APIClient, APITestCase
 
 from .services import (
     BookingConflictError,
@@ -28,6 +31,149 @@ class HealthCheckTests(APITestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"status": "ok"})
+
+
+class BookingApiTests(APITestCase):
+    def setUp(self):
+        self.ship = Ship.objects.create(name="USS Wanderer")
+        self.other_ship = Ship.objects.create(name="Nostromo")
+
+    def payload(self, start, end, ship_id=None, pilot="Han Solo"):
+        return {
+            "shipId": ship_id or self.ship.id,
+            "pilotName": pilot,
+            "startTime": f"2030-07-10T{start}-05:00",
+            "endTime": f"2030-07-10T{end}-05:00",
+        }
+
+    def create(self, start, end, ship_id=None, pilot="Han Solo"):
+        return self.client.post(
+            "/api/bookings/",
+            self.payload(start, end, ship_id, pilot),
+            format="json",
+        )
+
+    def test_list_ships_returns_fleet(self):
+        response = self.client.get("/api/ships/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            [
+                {"id": self.ship.id, "name": "USS Wanderer"},
+                {"id": self.other_ship.id, "name": "Nostromo"},
+            ],
+        )
+
+    def test_create_booking_returns_central_iso_timestamps(self):
+        response = self.create("10:00:00", "11:00:00")
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["shipId"], self.ship.id)
+        self.assertEqual(response.json()["pilotName"], "Han Solo")
+        self.assertTrue(response.json()["startTime"].endswith("-05:00"))
+        self.assertEqual(Booking.objects.count(), 1)
+
+    def test_overlapping_booking_returns_conflict(self):
+        self.assertEqual(self.create("10:00:00", "12:00:00").status_code, 201)
+
+        response = self.create("11:00:00", "13:00:00")
+
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("unavailable", response.json()["detail"])
+        self.assertEqual(Booking.objects.count(), 1)
+
+    def test_refueling_buffer_and_exact_boundary(self):
+        self.assertEqual(self.create("10:00:00", "12:00:00").status_code, 201)
+        self.assertEqual(self.create("12:29:00", "13:00:00").status_code, 409)
+        self.assertEqual(self.create("12:30:00", "13:00:00").status_code, 201)
+
+    def test_booking_before_existing_booking_obeys_buffer(self):
+        self.assertEqual(self.create("10:00:00", "12:00:00").status_code, 201)
+
+        self.assertEqual(self.create("09:30:00", "09:59:00").status_code, 409)
+        self.assertEqual(self.create("09:00:00", "09:30:00").status_code, 201)
+
+    def test_different_ship_can_book_same_time(self):
+        self.assertEqual(self.create("10:00:00", "12:00:00").status_code, 201)
+
+        response = self.create("10:00:00", "12:00:00", self.other_ship.id)
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(Booking.objects.count(), 2)
+
+    def test_outside_hours_and_invalid_order_return_422(self):
+        outside = self.create("05:00:00", "06:00:00")
+        reversed_times = self.create("11:00:00", "10:00:00")
+
+        self.assertEqual(outside.status_code, 422)
+        self.assertIn("6:00 AM", outside.json()["detail"])
+        self.assertEqual(reversed_times.status_code, 422)
+
+    def test_missing_pilot_and_timezone_are_validation_errors(self):
+        missing_pilot = self.client.post(
+            "/api/bookings/",
+            self.payload("10:00:00", "11:00:00", pilot="  "),
+            format="json",
+        )
+        naive_timestamp = self.payload("10:00:00", "11:00:00")
+        naive_timestamp["startTime"] = "2030-07-10T10:00:00"
+        invalid_timestamp = self.client.post(
+            "/api/bookings/",
+            naive_timestamp,
+            format="json",
+        )
+
+        self.assertEqual(missing_pilot.status_code, 400)
+        self.assertEqual(invalid_timestamp.status_code, 400)
+        self.assertIn("timezone offset", str(invalid_timestamp.json()))
+
+    def test_malformed_timestamp_returns_validation_error(self):
+        payload = self.payload("10:00:00", "11:00:00")
+        payload["startTime"] = "not-a-date-05:00"
+
+        response = self.client.post("/api/bookings/", payload, format="json")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("startTime", response.json())
+
+    def test_unknown_ship_returns_404(self):
+        response = self.create("10:00:00", "11:00:00", ship_id=999)
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json(), {"detail": "Ship not found."})
+
+
+class ConcurrentBookingApiTests(TransactionTestCase):
+    reset_sequences = True
+
+    def setUp(self):
+        self.ship = Ship.objects.create(name="Millennium Falcon")
+
+    def test_only_one_concurrent_request_can_book_the_same_slot(self):
+        barrier = Barrier(2)
+        payload = {
+            "shipId": self.ship.id,
+            "pilotName": "Leia Organa",
+            "startTime": "2030-07-10T10:00:00-05:00",
+            "endTime": "2030-07-10T11:00:00-05:00",
+        }
+
+        def submit_booking():
+            close_old_connections()
+            try:
+                barrier.wait(timeout=5)
+                client = APIClient()
+                response = client.post("/api/bookings/", payload, format="json")
+                return response.status_code
+            finally:
+                close_old_connections()
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            results = list(executor.map(lambda _: submit_booking(), range(2)))
+
+        self.assertCountEqual(results, [201, 409])
+        self.assertEqual(Booking.objects.filter(ship=self.ship).count(), 1)
 
 
 class BookingModelTests(TestCase):
