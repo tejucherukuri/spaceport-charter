@@ -30,6 +30,11 @@ class UnavailabilityQuerySerializer(serializers.Serializer):
     date = serializers.DateField(input_formats=["%Y-%m-%d"])
 
 
+class DashboardQuerySerializer(serializers.Serializer):
+    from_date = serializers.DateField(input_formats=["%Y-%m-%d"], required=False)
+    to = serializers.DateField(input_formats=["%Y-%m-%d"], required=False)
+
+
 class BookingCreateSerializer(serializers.Serializer):
     shipId = serializers.IntegerField(source="ship_id", min_value=1)
     pilotName = serializers.CharField(
@@ -51,3 +56,11 @@ class BookingReadSerializer(serializers.ModelSerializer):
     class Meta:
         model = Booking
         fields = ["id", "shipId", "pilotName", "startTime", "endTime"]
+
+
+class DashboardShipSerializer(serializers.ModelSerializer):
+    bookings = BookingReadSerializer(source="range_bookings", many=True, read_only=True)
+
+    class Meta:
+        model = Ship
+        fields = ["id", "name", "bookings"]

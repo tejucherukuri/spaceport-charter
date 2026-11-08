@@ -256,6 +256,98 @@ class UnavailabilityApiTests(APITestCase):
         self.assertEqual(response.status_code, 404)
 
 
+class DashboardApiTests(APITestCase):
+    central = ZoneInfo("America/Chicago")
+    start_day = date(2030, 7, 10)
+
+    def setUp(self):
+        self.ship = Ship.objects.create(name="USS Wanderer")
+        self.other_ship = Ship.objects.create(name="Serenity")
+        self.empty_ship = Ship.objects.create(name="Nostromo")
+
+    def add_booking(self, ship, day, pilot, start_hour, end_hour):
+        return Booking.objects.create(
+            ship=ship,
+            pilot_name=pilot,
+            start_time=datetime.combine(day, time(start_hour), tzinfo=self.central),
+            end_time=datetime.combine(day, time(end_hour), tzinfo=self.central),
+        )
+
+    def test_dashboard_groups_sorted_bookings_by_ship_and_keeps_empty_ships(self):
+        self.add_booking(self.ship, self.start_day, "Poe", 14, 15)
+        first = self.add_booking(self.ship, self.start_day, "Rey", 9, 10)
+        self.add_booking(
+            self.other_ship, self.start_day + timedelta(days=1), "Finn", 11, 12
+        )
+
+        with self.assertNumQueries(2):
+            response = self.client.get(
+                "/api/dashboard/",
+                {"from": "2030-07-10", "to": "2030-07-11"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["from"], "2030-07-10")
+        self.assertEqual(body["to"], "2030-07-11")
+        self.assertEqual(len(body["ships"]), 3)
+        self.assertEqual(
+            [booking["pilotName"] for booking in body["ships"][0]["bookings"]],
+            ["Rey", "Poe"],
+        )
+        self.assertEqual(
+            body["ships"][0]["bookings"][0]["id"],
+            first.id,
+        )
+        self.assertEqual(
+            [booking["pilotName"] for booking in body["ships"][1]["bookings"]],
+            ["Finn"],
+        )
+        self.assertEqual(body["ships"][2]["bookings"], [])
+
+    def test_dashboard_includes_date_range_end_and_excludes_outside_bookings(self):
+        self.add_booking(self.ship, self.start_day - timedelta(days=1), "Before", 9, 10)
+        self.add_booking(self.ship, self.start_day, "Included", 9, 10)
+        self.add_booking(self.ship, self.start_day + timedelta(days=1), "Last", 9, 10)
+        self.add_booking(self.ship, self.start_day + timedelta(days=2), "After", 9, 10)
+
+        response = self.client.get(
+            "/api/dashboard/",
+            {"from": "2030-07-10", "to": "2030-07-11"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        pilots = [b["pilotName"] for b in response.json()["ships"][0]["bookings"]]
+        self.assertEqual(pilots, ["Included", "Last"])
+
+    def test_dashboard_defaults_to_today_through_two_weeks(self):
+        response = self.client.get("/api/dashboard/")
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        today = django_timezone.now().astimezone(self.central).date()
+        self.assertEqual(body["from"], today.isoformat())
+        self.assertEqual(body["to"], (today + timedelta(days=14)).isoformat())
+
+    def test_invalid_dates_and_ranges_return_errors(self):
+        invalid_date = self.client.get(
+            "/api/dashboard/",
+            {"from": "2030-02-30", "to": "2030-03-01"},
+        )
+        reversed_range = self.client.get(
+            "/api/dashboard/",
+            {"from": "2030-07-11", "to": "2030-07-10"},
+        )
+        too_large = self.client.get(
+            "/api/dashboard/",
+            {"from": "2030-01-01", "to": "2031-01-03"},
+        )
+
+        self.assertEqual(invalid_date.status_code, 400)
+        self.assertEqual(reversed_range.status_code, 422)
+        self.assertEqual(too_large.status_code, 422)
+
+
 class ConcurrentBookingApiTests(TransactionTestCase):
     reset_sequences = True
 

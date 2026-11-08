@@ -1,9 +1,10 @@
 from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
+from django.db.models import Prefetch
 from django.utils import timezone as django_timezone
 
-from .models import Booking
+from .models import Booking, Ship
 
 
 CENTRAL = ZoneInfo("America/Chicago")
@@ -137,3 +138,21 @@ def get_unavailability(ship_id: int, day: date) -> dict:
         "refuelBufferMinutes": int(REFUEL_BUFFER.total_seconds() // 60),
         "unavailable": unavailable,
     }
+
+
+def get_dashboard_ships(from_date: date, to_date: date):
+    """Fetch all ships with bookings starting in the inclusive Central date range."""
+    start_utc = datetime.combine(
+        from_date, time.min, tzinfo=CENTRAL
+    ).astimezone(timezone.utc)
+    end_utc = datetime.combine(
+        to_date + timedelta(days=1), time.min, tzinfo=CENTRAL
+    ).astimezone(timezone.utc)
+
+    bookings = Booking.objects.filter(
+        start_time__gte=start_utc,
+        start_time__lt=end_utc,
+    ).order_by("start_time", "id")
+    return Ship.objects.order_by("id").prefetch_related(
+        Prefetch("bookings", queryset=bookings, to_attr="range_bookings")
+    )

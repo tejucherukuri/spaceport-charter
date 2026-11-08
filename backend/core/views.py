@@ -1,9 +1,11 @@
 import logging
 import time
+from datetime import timedelta
 
 from django.db import connection, transaction
 from django.db.utils import OperationalError
 from django.db.models import F
+from django.utils import timezone as django_timezone
 from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
@@ -12,12 +14,16 @@ from .models import Booking, Ship
 from .serializers import (
     BookingCreateSerializer,
     BookingReadSerializer,
+    DashboardQuerySerializer,
+    DashboardShipSerializer,
     ShipSerializer,
     UnavailabilityQuerySerializer,
 )
 from .services import (
+    CENTRAL,
     BookingConflictError,
     BookingRuleError,
+    get_dashboard_ships,
     get_unavailability,
     validate_booking,
 )
@@ -50,6 +56,45 @@ def ship_unavailability(request, ship_id):
 
     availability = get_unavailability(ship.id, query.validated_data["date"])
     return Response({"shipId": ship.id, **availability})
+
+
+@api_view(["GET"])
+def fleet_dashboard(request):
+    query_data = {}
+    if "from" in request.query_params:
+        query_data["from_date"] = request.query_params["from"]
+    if "to" in request.query_params:
+        query_data["to"] = request.query_params["to"]
+
+    query = DashboardQuerySerializer(data=query_data)
+    query.is_valid(raise_exception=True)
+    today = django_timezone_now_central_date()
+    from_date = query.validated_data.get("from_date", today)
+    to_date = query.validated_data.get("to", from_date + timedelta(days=14))
+
+    if to_date < from_date:
+        return Response(
+            {"detail": "`to` must not be before `from`."},
+            status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        )
+    if (to_date - from_date).days > 366:
+        return Response(
+            {"detail": "Date range may not exceed 366 days."},
+            status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        )
+
+    ships = get_dashboard_ships(from_date, to_date)
+    return Response(
+        {
+            "from": from_date.isoformat(),
+            "to": to_date.isoformat(),
+            "ships": DashboardShipSerializer(ships, many=True).data,
+        }
+    )
+
+
+def django_timezone_now_central_date():
+    return django_timezone.now().astimezone(CENTRAL).date()
 
 
 @api_view(["POST"])
