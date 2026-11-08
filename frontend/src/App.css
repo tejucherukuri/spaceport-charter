@@ -1,0 +1,60 @@
+#root {
+  min-height: 100vh;
+}
+
+.app-shell {
+  width: min(100% - 2rem, 56rem);
+  margin: 0 auto;
+  padding: 3rem 0;
+}
+
+.app-header {
+  padding: 2rem 0;
+}
+
+.eyebrow {
+  color: #b7c8ff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+}
+
+.app-header h1 {
+  margin: 0;
+  font-size: clamp(2.5rem, 8vw, 4.5rem);
+  letter-spacing: -0.06em;
+}
+
+.intro,
+.muted {
+  color: #a4afc4;
+}
+
+.fleet-preview {
+  border: 1px solid #2c3850;
+  border-radius: 1rem;
+  background: #172033;
+  padding: 1.5rem;
+}
+
+.fleet-preview h2 {
+  margin-top: 0;
+}
+
+.fleet-preview ul {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: 0.75rem;
+  padding: 0;
+  list-style: none;
+}
+
+.fleet-preview li {
+  border-radius: 0.6rem;
+  background: #222d43;
+  padding: 0.8rem 1rem;
+}
+
+.error-message {
+  color: #ff9a9a;
+}
