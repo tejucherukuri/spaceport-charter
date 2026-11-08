@@ -1,8 +1,9 @@
 import io
 import json
 import tempfile
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from django.db import IntegrityError, transaction
 from django.core.management import call_command
@@ -12,6 +13,12 @@ from django.test import TestCase
 from django.utils import timezone as django_timezone
 from rest_framework.test import APITestCase
 
+from .services import (
+    BookingConflictError,
+    BookingRuleError,
+    validate_booking,
+    validate_booking_times,
+)
 from .models import Booking, Ship
 
 
@@ -119,3 +126,96 @@ class SeedImportTests(TestCase):
             call_command("load_seed", seed_file)
 
         self.assertEqual(list(Booking.objects.all()), [existing])
+
+
+class BookingRuleTests(TestCase):
+    central = ZoneInfo("America/Chicago")
+
+    def setUp(self):
+        self.ship = Ship.objects.create(name="Rocinante")
+        self.day = date(2026, 11, 9)
+
+    def local(self, hour, minute=0, day=None):
+        return datetime.combine(day or self.day, time(hour, minute), tzinfo=self.central)
+
+    def add_booking(self, start, end, ship=None):
+        return Booking.objects.create(
+            ship=ship or self.ship,
+            pilot_name="James Holden",
+            start_time=start,
+            end_time=end,
+        )
+
+    def test_booking_within_operating_hours_is_valid(self):
+        start, end = validate_booking_times(
+            self.local(6), self.local(22)
+        )
+
+        self.assertEqual(start.astimezone(self.central).time(), time(6))
+        self.assertEqual(end.astimezone(self.central).time(), time(22))
+
+    def test_booking_outside_operating_hours_is_rejected(self):
+        with self.assertRaisesRegex(BookingRuleError, "6:00 AM"):
+            validate_booking_times(self.local(5, 59), self.local(7))
+        with self.assertRaisesRegex(BookingRuleError, "6:00 AM"):
+            validate_booking_times(self.local(21), self.local(22, 1))
+
+    def test_end_must_follow_start_and_stay_on_same_central_date(self):
+        with self.assertRaisesRegex(BookingRuleError, "after"):
+            validate_booking_times(self.local(10), self.local(10))
+        with self.assertRaisesRegex(BookingRuleError, "after"):
+            validate_booking_times(self.local(11), self.local(10))
+        with self.assertRaisesRegex(BookingRuleError, "same Central Time date"):
+            validate_booking_times(self.local(21), self.local(6, day=date(2026, 11, 10)))
+
+    def test_naive_timestamps_are_rejected(self):
+        with self.assertRaisesRegex(BookingRuleError, "include a timezone"):
+            validate_booking_times(
+                datetime(2026, 11, 9, 10),
+                datetime(2026, 11, 9, 11),
+            )
+
+    def test_dst_operating_window_uses_central_offset_for_that_date(self):
+        spring_open = datetime(2026, 3, 8, 6, tzinfo=self.central)
+        fall_open = datetime(2026, 11, 1, 6, tzinfo=self.central)
+
+        spring_start, _ = validate_booking_times(
+            spring_open, datetime(2026, 3, 8, 7, tzinfo=self.central)
+        )
+        fall_start, _ = validate_booking_times(
+            fall_open, datetime(2026, 11, 1, 7, tzinfo=self.central)
+        )
+
+        self.assertEqual(spring_start.utcoffset(), timedelta(0))
+        self.assertEqual(spring_start.hour, 11)
+        self.assertEqual(fall_start.utcoffset(), timedelta(0))
+        self.assertEqual(fall_start.hour, 12)
+
+    def test_overlapping_booking_on_same_ship_is_rejected(self):
+        self.add_booking(self.local(10), self.local(12))
+
+        with self.assertRaises(BookingConflictError):
+            validate_booking(self.ship.id, self.local(11), self.local(13))
+
+    def test_refueling_buffer_is_enforced_before_and_after(self):
+        self.add_booking(self.local(10), self.local(12))
+
+        with self.assertRaises(BookingConflictError):
+            validate_booking(self.ship.id, self.local(12, 29), self.local(13))
+        with self.assertRaises(BookingConflictError):
+            validate_booking(self.ship.id, self.local(9), self.local(9, 31))
+
+    def test_exactly_thirty_minutes_of_refueling_is_allowed(self):
+        self.add_booking(self.local(10), self.local(12))
+
+        validate_booking(self.ship.id, self.local(12, 30), self.local(13))
+        validate_booking(self.ship.id, self.local(9), self.local(9, 30))
+
+    def test_different_ship_can_book_same_time(self):
+        other_ship = Ship.objects.create(name="Serenity")
+        self.add_booking(self.local(10), self.local(12))
+
+        start, end = validate_booking(other_ship.id, self.local(10), self.local(12))
+
+        self.assertEqual(start.astimezone(self.central).time(), time(10))
+        self.assertEqual(end.astimezone(self.central).time(), time(12))
