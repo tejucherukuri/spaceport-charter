@@ -70,3 +70,55 @@ Aim for **2–3 hours**. If you find yourself going significantly over, stop and
 We'll review your code beforehand and discuss it with you on a follow-up call, where we'll ask about your decisions and may request a small modification live. Build something you'll be comfortable walking us through.
 
 Good luck, dispatcher. The fleet is waiting.
+
+## Local implementation
+
+The application uses Django REST Framework with SQLite for the API and React + TypeScript with Vite for the browser UI.
+
+### Start the backend
+
+```bash
+cd backend
+python3 -m venv ../.venv
+../.venv/bin/pip install -r requirements.txt
+cp .env.example .env
+cd ..
+python3 seed.py > seed.json
+cd backend
+../.venv/bin/python manage.py migrate
+../.venv/bin/python manage.py load_seed
+../.venv/bin/python manage.py runserver 127.0.0.1:8000
+```
+
+### Start the frontend
+
+In another terminal:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open the Vite URL (normally `http://localhost:5173`). Vite proxies `/api/` requests to Django at `http://127.0.0.1:8000`.
+
+### Test
+
+```bash
+cd backend
+../.venv/bin/python manage.py check
+../.venv/bin/python manage.py test core
+
+cd ../frontend
+npm run build
+npm run lint
+```
+
+### Implemented API
+
+- `GET /api/ships/` lists ships.
+- `GET /api/ships/{id}/unavailability/?date=YYYY-MM-DD` returns merged, refuel-buffered blocked intervals for one Central Time date. The booking screen uses this endpoint rather than downloading the full booking list.
+- `POST /api/bookings/` accepts `{ "shipId": 1, "pilotName": "Han Solo", "startTime": "2030-07-10T10:00:00-05:00", "endTime": "2030-07-10T11:00:00-05:00" }`.
+- `GET /api/dashboard/?from=YYYY-MM-DD&to=YYYY-MM-DD` returns bookings grouped by ship for an inclusive Central date range. Both dates are optional; the default is today through 14 days ahead. The maximum range is 366 days.
+
+Booking request times must include an ISO 8601 UTC offset. They are stored as timezone-aware UTC instants; operating-hour and date rules use `America/Chicago`.
