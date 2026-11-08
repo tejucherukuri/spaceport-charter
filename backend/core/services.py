@@ -1,4 +1,4 @@
-from datetime import datetime, time, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from django.utils import timezone as django_timezone
@@ -73,3 +73,67 @@ def validate_booking(
         )
 
     return start_utc, end_utc
+
+
+def get_unavailability(ship_id: int, day: date) -> dict:
+    """Return merged, Central-day blocked intervals for one ship."""
+    opens = datetime.combine(day, OPERATING_OPEN, tzinfo=CENTRAL)
+    closes = datetime.combine(day, OPERATING_CLOSE, tzinfo=CENTRAL)
+    query_start = opens - REFUEL_BUFFER
+    query_end = closes + REFUEL_BUFFER
+
+    bookings = Booking.objects.filter(
+        ship_id=ship_id,
+        start_time__lt=query_end,
+        end_time__gt=query_start,
+    ).only("start_time", "end_time")
+
+    intervals = sorted(
+        (
+            booking.start_time - REFUEL_BUFFER,
+            booking.end_time + REFUEL_BUFFER,
+        )
+        for booking in bookings
+    )
+
+    merged = []
+    for start, end in intervals:
+        if merged and start <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+        else:
+            merged.append((start, end))
+
+    midnight = datetime.combine(day, time.min, tzinfo=CENTRAL)
+
+    def minute_of_day(value):
+        return int(
+            (value.astimezone(timezone.utc) - midnight.astimezone(timezone.utc))
+            .total_seconds()
+            // 60
+        )
+
+    unavailable = []
+    for start, end in merged:
+        clipped_start = max(start, opens)
+        clipped_end = min(end, closes)
+        if clipped_start >= clipped_end:
+            continue
+        unavailable.append(
+            {
+                "start": clipped_start.astimezone(CENTRAL).isoformat(),
+                "end": clipped_end.astimezone(CENTRAL).isoformat(),
+                "startMinute": minute_of_day(clipped_start),
+                "endMinute": minute_of_day(clipped_end),
+            }
+        )
+
+    return {
+        "date": day.isoformat(),
+        "timezone": "America/Chicago",
+        "open": opens.isoformat(),
+        "close": closes.isoformat(),
+        "openMinute": minute_of_day(opens),
+        "closeMinute": minute_of_day(closes),
+        "refuelBufferMinutes": int(REFUEL_BUFFER.total_seconds() // 60),
+        "unavailable": unavailable,
+    }

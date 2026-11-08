@@ -144,6 +144,118 @@ class BookingApiTests(APITestCase):
         self.assertEqual(response.json(), {"detail": "Ship not found."})
 
 
+class UnavailabilityApiTests(APITestCase):
+    central = ZoneInfo("America/Chicago")
+    day = date(2030, 7, 10)
+
+    def setUp(self):
+        self.ship = Ship.objects.create(name="Rocinante")
+        self.other_ship = Ship.objects.create(name="Nostromo")
+
+    def local(self, day, hour, minute=0):
+        return datetime.combine(day, time(hour, minute), tzinfo=self.central)
+
+    def add_booking(self, ship, day, start, end):
+        return Booking.objects.create(
+            ship=ship,
+            pilot_name="Naomi Nagata",
+            start_time=self.local(day, *start),
+            end_time=self.local(day, *end),
+        )
+
+    def get_unavailability(self, ship_id=None, day=None):
+        return self.client.get(
+            f"/api/ships/{ship_id or self.ship.id}/unavailability/",
+            {"date": (day or self.day).isoformat()},
+        )
+
+    def test_returns_operating_window_and_no_blocked_intervals(self):
+        response = self.get_unavailability()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["timezone"], "America/Chicago")
+        self.assertEqual(response.json()["open"], "2030-07-10T06:00:00-05:00")
+        self.assertEqual(response.json()["close"], "2030-07-10T22:00:00-05:00")
+        self.assertEqual(response.json()["openMinute"], 360)
+        self.assertEqual(response.json()["closeMinute"], 1320)
+        self.assertEqual(response.json()["unavailable"], [])
+
+    def test_booking_and_refuel_buffer_return_as_blocked_interval(self):
+        self.add_booking(self.ship, self.day, (10, 0), (11, 0))
+
+        response = self.get_unavailability()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json()["unavailable"],
+            [
+                {
+                    "start": "2030-07-10T09:30:00-05:00",
+                    "end": "2030-07-10T11:30:00-05:00",
+                    "startMinute": 570,
+                    "endMinute": 690,
+                }
+            ],
+        )
+
+    def test_overlapping_or_touching_blocked_intervals_are_merged(self):
+        self.add_booking(self.ship, self.day, (10, 0), (11, 0))
+        self.add_booking(self.ship, self.day, (12, 0), (13, 0))
+
+        response = self.get_unavailability()
+
+        self.assertEqual(response.status_code, 200)
+        intervals = response.json()["unavailable"]
+        self.assertEqual(len(intervals), 1)
+        self.assertEqual(intervals[0]["startMinute"], 570)
+        self.assertEqual(intervals[0]["endMinute"], 810)
+
+    def test_blocked_ranges_are_clipped_to_operating_hours(self):
+        self.add_booking(self.ship, self.day, (6, 0), (7, 0))
+        self.add_booking(self.ship, self.day, (21, 0), (22, 0))
+
+        response = self.get_unavailability()
+
+        self.assertEqual(response.status_code, 200)
+        intervals = response.json()["unavailable"]
+        self.assertEqual(
+            [(item["startMinute"], item["endMinute"]) for item in intervals],
+            [(360, 450), (1230, 1320)],
+        )
+
+    def test_only_requested_ship_is_included(self):
+        self.add_booking(self.other_ship, self.day, (10, 0), (11, 0))
+
+        response = self.get_unavailability()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["unavailable"], [])
+
+    def test_neighboring_day_booking_buffer_is_queried_but_clipped(self):
+        prior_day = self.day - timedelta(days=1)
+        self.add_booking(self.ship, prior_day, (21, 0), (22, 0))
+
+        response = self.get_unavailability()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["unavailable"], [])
+
+    def test_invalid_or_missing_date_returns_bad_request(self):
+        invalid = self.client.get(
+            f"/api/ships/{self.ship.id}/unavailability/",
+            {"date": "2030-02-30"},
+        )
+        missing = self.client.get(f"/api/ships/{self.ship.id}/unavailability/")
+
+        self.assertEqual(invalid.status_code, 400)
+        self.assertEqual(missing.status_code, 400)
+
+    def test_unknown_ship_returns_not_found(self):
+        response = self.get_unavailability(ship_id=999)
+
+        self.assertEqual(response.status_code, 404)
+
+
 class ConcurrentBookingApiTests(TransactionTestCase):
     reset_sequences = True
 

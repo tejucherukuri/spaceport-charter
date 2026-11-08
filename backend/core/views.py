@@ -9,8 +9,18 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
 from .models import Booking, Ship
-from .serializers import BookingCreateSerializer, BookingReadSerializer, ShipSerializer
-from .services import BookingConflictError, BookingRuleError, validate_booking
+from .serializers import (
+    BookingCreateSerializer,
+    BookingReadSerializer,
+    ShipSerializer,
+    UnavailabilityQuerySerializer,
+)
+from .services import (
+    BookingConflictError,
+    BookingRuleError,
+    get_unavailability,
+    validate_booking,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -25,6 +35,21 @@ def health_check(request):
 def list_ships(request):
     ships = Ship.objects.all()
     return Response(ShipSerializer(ships, many=True).data)
+
+
+@api_view(["GET"])
+def ship_unavailability(request, ship_id):
+    query = UnavailabilityQuerySerializer(data=request.query_params)
+    query.is_valid(raise_exception=True)
+    ship = Ship.objects.filter(pk=ship_id).only("id").first()
+    if ship is None:
+        return Response(
+            {"detail": "Ship not found."},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    availability = get_unavailability(ship.id, query.validated_data["date"])
+    return Response({"shipId": ship.id, **availability})
 
 
 @api_view(["POST"])

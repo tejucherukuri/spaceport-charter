@@ -26,6 +26,10 @@ class ShipSerializer(serializers.ModelSerializer):
         fields = ["id", "name"]
 
 
+class UnavailabilityQuerySerializer(serializers.Serializer):
+    date = serializers.DateField(input_formats=["%Y-%m-%d"])
+
+
 class BookingCreateSerializer(serializers.Serializer):
     shipId = serializers.IntegerField(source="ship_id", min_value=1)
     pilotName = serializers.CharField(
