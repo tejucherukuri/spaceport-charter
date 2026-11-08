@@ -44,6 +44,31 @@
   margin-bottom: 0;
 }
 
+.primary-nav {
+  display: flex;
+  gap: 0.6rem;
+  border-bottom: 1px solid #2c3850;
+  padding-bottom: 0.8rem;
+}
+
+.primary-nav button,
+.date-presets button {
+  min-height: 2.5rem;
+  border: 1px solid #3a4964;
+  border-radius: 0.55rem;
+  padding: 0.55rem 0.9rem;
+  background: #172033;
+  color: #dce5f5;
+  font: inherit;
+  cursor: pointer;
+}
+
+.primary-nav button.active {
+  border-color: #8da6ff;
+  background: #2b3c70;
+  color: white;
+}
+
 .booking-card {
   border: 1px solid #2c3850;
   border-radius: 1rem;
@@ -245,6 +270,97 @@ button:focus-visible {
   margin: 1rem 0 0;
   border-radius: 0.55rem;
   padding: 0.75rem 1rem;
+}
+
+.dashboard-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 1rem;
+  border: 1px solid #2c3850;
+  border-radius: 0.8rem;
+  background: #172033;
+  padding: 1rem;
+}
+
+.dashboard-controls .field {
+  flex: 1 1 12rem;
+}
+
+.date-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.date-presets button:hover {
+  border-color: #9cb0ff;
+}
+
+.range-summary {
+  color: #a4afc4;
+  font-size: 0.9rem;
+}
+
+.ship-bookings {
+  margin-top: 1rem;
+  overflow: hidden;
+  border: 1px solid #2c3850;
+  border-radius: 0.8rem;
+  background: #172033;
+}
+
+.ship-bookings-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.9rem 1rem;
+}
+
+.ship-bookings-heading h3 {
+  margin: 0;
+}
+
+.ship-bookings-heading span {
+  color: #a4afc4;
+  font-size: 0.85rem;
+}
+
+.empty-state {
+  margin: 0;
+  border-top: 1px solid #2c3850;
+  padding: 1rem;
+  color: #a4afc4;
+}
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+.table-scroll table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.table-scroll th,
+.table-scroll td {
+  border-top: 1px solid #2c3850;
+  padding: 0.75rem 1rem;
+  vertical-align: top;
+}
+
+.table-scroll th {
+  color: #a4afc4;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.table-scroll td {
+  color: #edf1fa;
 }
 
 .error-message {

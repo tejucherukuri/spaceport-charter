@@ -19,6 +19,29 @@ export function formatMinute(minute: number): string {
   return `${displayHour}:${minutes} ${period}`;
 }
 
+export function addDays(date: string, count: number): string {
+  const [year, month, day] = date.split("-").map(Number);
+  const result = new Date(Date.UTC(year, month - 1, day + count));
+  return [
+    result.getUTCFullYear(),
+    String(result.getUTCMonth() + 1).padStart(2, "0"),
+    String(result.getUTCDate()).padStart(2, "0"),
+  ].join("-");
+}
+
+export function formatDateTime(value: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: CENTRAL_TIME_ZONE,
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+  }).format(new Date(value));
+}
+
 function centralOffsetForDate(date: string): string {
   const [year, month, day] = date.split("-").map(Number);
   const reference = new Date(Date.UTC(year, month - 1, day, 12));
