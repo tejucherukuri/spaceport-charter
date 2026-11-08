@@ -4,6 +4,7 @@ dist
 .env
 __pycache__
 *.db
+*.sqlite3
 *.db-wal
 *.db-shm
 .DS_Store
