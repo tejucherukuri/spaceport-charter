@@ -1,0 +1,10 @@
+node_modules
+dist
+.venv
+.env
+__pycache__
+*.db
+*.db-wal
+*.db-shm
+.DS_Store
+seed.json
