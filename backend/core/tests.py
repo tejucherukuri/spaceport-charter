@@ -152,8 +152,8 @@ class UnavailabilityApiTests(APITestCase):
         self.ship = Ship.objects.create(name="Rocinante")
         self.other_ship = Ship.objects.create(name="Nostromo")
 
-    def local(self, day, hour, minute=0):
-        return datetime.combine(day, time(hour, minute), tzinfo=self.central)
+    def local(self, day, hour, minute=0, second=0):
+        return datetime.combine(day, time(hour, minute, second), tzinfo=self.central)
 
     def add_booking(self, ship, day, start, end):
         return Booking.objects.create(
@@ -180,6 +180,15 @@ class UnavailabilityApiTests(APITestCase):
         self.assertEqual(response.json()["closeMinute"], 1320)
         self.assertEqual(response.json()["unavailable"], [])
 
+    def test_operating_window_minute_offsets_are_central_wall_clock_on_dst_days(self):
+        spring_forward = self.get_unavailability(day=date(2030, 3, 10))
+        fall_back = self.get_unavailability(day=date(2030, 11, 3))
+
+        for response in (spring_forward, fall_back):
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json()["openMinute"], 360)
+            self.assertEqual(response.json()["closeMinute"], 1320)
+
     def test_booking_and_refuel_buffer_return_as_blocked_interval(self):
         self.add_booking(self.ship, self.day, (10, 0), (11, 0))
 
@@ -197,6 +206,16 @@ class UnavailabilityApiTests(APITestCase):
                 }
             ],
         )
+
+    def test_partial_minutes_are_rounded_outward_for_slot_disabling(self):
+        self.add_booking(self.ship, self.day, (10, 0, 30), (11, 0, 30))
+
+        response = self.get_unavailability()
+
+        self.assertEqual(response.status_code, 200)
+        blocked = response.json()["unavailable"][0]
+        self.assertEqual(blocked["startMinute"], 570)
+        self.assertEqual(blocked["endMinute"], 691)
 
     def test_overlapping_or_touching_blocked_intervals_are_merged(self):
         self.add_booking(self.ship, self.day, (10, 0), (11, 0))
@@ -338,6 +357,10 @@ class DashboardApiTests(APITestCase):
             "/api/dashboard/",
             {"from": "2030-07-11", "to": "2030-07-10"},
         )
+        max_range = self.client.get(
+            "/api/dashboard/",
+            {"from": "2030-01-01", "to": "2031-01-01"},
+        )
         too_large = self.client.get(
             "/api/dashboard/",
             {"from": "2030-01-01", "to": "2031-01-03"},
@@ -345,6 +368,7 @@ class DashboardApiTests(APITestCase):
 
         self.assertEqual(invalid_date.status_code, 400)
         self.assertEqual(reversed_range.status_code, 422)
+        self.assertEqual(max_range.status_code, 200)
         self.assertEqual(too_large.status_code, 422)
 
 

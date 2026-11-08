@@ -104,14 +104,12 @@ def get_unavailability(ship_id: int, day: date) -> dict:
         else:
             merged.append((start, end))
 
-    midnight = datetime.combine(day, time.min, tzinfo=CENTRAL)
-
-    def minute_of_day(value):
-        return int(
-            (value.astimezone(timezone.utc) - midnight.astimezone(timezone.utc))
-            .total_seconds()
-            // 60
-        )
+    def minute_of_day(value, *, round_up=False):
+        central_value = value.astimezone(CENTRAL)
+        minutes = central_value.hour * 60 + central_value.minute
+        if round_up and (central_value.second or central_value.microsecond):
+            minutes += 1
+        return minutes
 
     unavailable = []
     for start, end in merged:
@@ -124,7 +122,7 @@ def get_unavailability(ship_id: int, day: date) -> dict:
                 "start": clipped_start.astimezone(CENTRAL).isoformat(),
                 "end": clipped_end.astimezone(CENTRAL).isoformat(),
                 "startMinute": minute_of_day(clipped_start),
-                "endMinute": minute_of_day(clipped_end),
+                "endMinute": minute_of_day(clipped_end, round_up=True),
             }
         )
 

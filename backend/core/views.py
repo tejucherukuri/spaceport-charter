@@ -77,7 +77,7 @@ def fleet_dashboard(request):
             {"detail": "`to` must not be before `from`."},
             status=status.HTTP_422_UNPROCESSABLE_ENTITY,
         )
-    if (to_date - from_date).days > 366:
+    if (to_date - from_date).days >= 366:
         return Response(
             {"detail": "Date range may not exceed 366 days."},
             status=status.HTTP_422_UNPROCESSABLE_ENTITY,
